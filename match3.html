@@ -134,9 +134,9 @@
       // vertical
       count = 1;
       i = r - 1;
-      while (i >= 0 && board[i][c] === val) { count++; i--; }
+      while (i >= 0 && board[i]?.[c] === val) { count++; i--; }
       i = r + 1;
-      while (i < ROWS && board[i][c] === val) { count++; i++; }
+      while (i < ROWS && board[i]?.[c] === val) { count++; i++; }
       return count >= 3;
     }
 
