@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消消乐 - Match 3</title>
+<style>
+  * { box-sizing: border-box; user-select: none; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    display: flex; justify-content: center; align-items: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  .container {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(12px);
+    border-radius: 24px; padding: 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  h1 {
+    text-align: center; color: #fff; margin: 0 0 8px 0;
+    font-weight: 600; font-size: 28px;
+    letter-spacing: 2px;
+    text-shadow: 0 2px 10px rgba(100,100,255,0.3);
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; padding: 0 4px;
+  }
+  .score-box {
+    background: rgba(255,255,255,0.08);
+    padding: 8px 18px; border-radius: 12px;
+    color: #ffd700; font-size: 22px; font-weight: 700;
+    border: 1px solid rgba(255,215,0,0.2);
+  }
+  .new-game-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border: none; color: #fff; padding: 8px 20px;
+    border-radius: 10px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .new-game-btn:hover { transform: scale(1.05); filter: brightness(1.2); }
+  .board {
+    display: grid;
+    gap: 4px;
+    padding: 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .cell {
+    width: 56px; height: 56px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px;
+    cursor: pointer;
+    transition: transform 0.12s, opacity 0.25s, box-shadow 0.15s;
+    position: relative;
+  }
+  .cell:hover { transform: scale(1.06); }
+  .cell.selected {
+    box-shadow: 0 0 0 3px #fff, 0 0 20px rgba(255,255,255,0.4);
+    transform: scale(1.08);
+  }
+  .cell.matched {
+    animation: pop 0.3s ease forwards;
+  }
+  .cell.falling {
+    animation: drop 0.3s ease;
+  }
+  @keyframes pop {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.3); opacity: 0.6; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  @keyframes drop {
+    0% { transform: translateY(-60px); opacity: 0.5; }
+    60% { transform: translateY(4px); }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  .msg {
+    text-align: center; margin-top: 12px;
+    color: rgba(255,255,255,0.6); font-size: 14px;
+    min-height: 20px;
+  }
+  @media (max-width: 540px) {
+    .board { gap: 3px; padding: 6px; }
+    .cell { width: 40px; height: 40px; font-size: 22px; border-radius: 8px; }
+    .container { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✨ 消消乐</h1>
+  <div class="header">
+    <span class="score-box">🏆 <span id="score">0</span></span>
+    <button class="new-game-btn" id="newGameBtn">🔄 新游戏</button>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="msg" id="msg">点击两个相邻的宝石交换，三个以上消除！</div>
+</div>
+<script>
+  (function() {
+    const ROWS = 8, COLS = 8;
+    const GEMS = ['🔴','🔵','🟢','🟡','🟣','🟠'];
+    const COLORS = ['#ff4757','#3742fa','#2ed573','#ffa502','#a55eea','#ff6348'];
+
+    let board = [];
+    let score = 0;
+    let selected = null;
+    let isProcessing = false;
+
+    const boardEl = document.getElementById('board');
+    const scoreEl = document.getElementById('score');
+    const msgEl = document.getElementById('msg');
+
+    boardEl.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+
+    function randGem() {
+      return Math.floor(Math.random() * GEMS.length);
+    }
+
+    function hasMatch(r, c, val) {
+      // horizontal
+      let count = 1;
+      let i = c - 1;
+      while (i >= 0 && board[r][i] === val) { count++; i--; }
+      i = c + 1;
+      while (i < COLS && board[r][i] === val) { count++; i++; }
+      if (count >= 3) return true;
+      // vertical
+      count = 1;
+      i = r - 1;
+      while (i >= 0 && board[i][c] === val) { count++; i--; }
+      i = r + 1;
+      while (i < ROWS && board[i][c] === val) { count++; i++; }
+      return count >= 3;
+    }
+
+    function initBoard() {
+      board = [];
+      for (let r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (let c = 0; c < COLS; c++) {
+          let val;
+          let attempts = 0;
+          do {
+            val = randGem();
+            attempts++;
+          } while (attempts < 100 && hasMatch(r, c, val));
+          board[r][c] = val;
+        }
+      }
+    }
+
+    function findAllMatches() {
+      const matched = new Set();
+      // horizontal
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS - 2; c++) {
+          const v = board[r][c];
+          if (v === -1) continue;
+          if (board[r][c+1] === v && board[r][c+2] === v) {
+            let end = c+2;
+            while (end+1 < COLS && board[r][end+1] === v) end++;
+            for (let k = c; k <= end; k++) matched.add(`${r},${k}`);
+            c = end;
+          }
+        }
+      }
+      // vertical
+      for (let c = 0; c < COLS; c++) {
+        for (let r = 0; r < ROWS - 2; r++) {
+          const v = board[r][c];
+          if (v === -1) continue;
+          if (board[r+1][c] === v && board[r+2][c] === v) {
+            let end = r+2;
+            while (end+1 < ROWS && board[end+1][c] === v) end++;
+            for (let k = r; k <= end; k++) matched.add(`${k},${c}`);
+            r = end;
+          }
+        }
+      }
+      return matched;
+    }
+
+    function cascade() {
+      let moved = false;
+      for (let c = 0; c < COLS; c++) {
+        let writeRow = ROWS - 1;
+        for (let r = ROWS - 1; r >= 0; r--) {
+          if (board[r][c] !== -1) {
+            if (r !== writeRow) {
+              board[writeRow][c] = board[r][c];
+              board[r][c] = -1;
+              moved = true;
+            }
+            writeRow--;
+          }
+        }
+        for (let r = writeRow; r >= 0; r--) {
+          board[r][c] = randGem();
+          moved = true;
+        }
+      }
+      return moved;
+    }
+
+    function delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function processMatches() {
+      isProcessing = true;
+      let anyMatched = false;
+      while (true) {
+        const matches = findAllMatches();
+        if (matches.size === 0) break;
+        anyMatched = true;
+        score += matches.size * 10;
+        scoreEl.textContent = score;
+
+        // mark matched cells
+        const cells = document.querySelectorAll('.cell');
+        matches.forEach(key => {
+          const [r, c] = key.split(',').map(Number);
+          const idx = r * COLS + c;
+          cells[idx].classList.add('matched');
+        });
+
+        await delay(350);
+
+        // clear matched
+        matches.forEach(key => {
+          const [r, c] = key.split(',').map(Number);
+          board[r][c] = -1;
+        });
+
+        // cascade
+        cascade();
+        renderBoard();
+
+        await delay(250);
+      }
+      if (anyMatched) {
+        // check if any moves available
+        if (!hasValidMoves()) {
+          msgEl.textContent = '😅 没有可消除的步了，点击「新游戏」重新开始！';
+        } else {
+          msgEl.textContent = '继续消除！';
+        }
+      }
+      isProcessing = false;
+    }
+
+    function hasValidMoves() {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          // try swap right
+          if (c + 1 < COLS) {
+            [board[r][c], board[r][c+1]] = [board[r][c+1], board[r][c]];
+            if (findAllMatches().size > 0) {
+              [board[r][c], board[r][c+1]] = [board[r][c+1], board[r][c]];
+              return true;
+            }
+            [board[r][c], board[r][c+1]] = [board[r][c+1], board[r][c]];
+          }
+          // try swap down
+          if (r + 1 < ROWS) {
+            [board[r][c], board[r+1][c]] = [board[r+1][c], board[r][c]];
+            if (findAllMatches().size > 0) {
+              [board[r][c], board[r+1][c]] = [board[r+1][c], board[r][c]];
+              return true;
+            }
+            [board[r][c], board[r+1][c]] = [board[r+1][c], board[r][c]];
+          }
+        }
+      }
+      return false;
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = '';
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          const val = board[r][c];
+          if (val !== -1) {
+            cell.textContent = GEMS[val];
+            cell.style.background = COLORS[val] + '33';
+            cell.style.border = `1px solid ${COLORS[val]}44`;
+          } else {
+            cell.style.background = 'rgba(255,255,255,0.03)';
+          }
+          boardEl.appendChild(cell);
+        }
+      }
+    }
+
+    function handleClick(e) {
+      if (isProcessing) return;
+      const cell = e.target.closest('.cell');
+      if (!cell) return;
+      const r = parseInt(cell.dataset.row);
+      const c = parseInt(cell.dataset.col);
+
+      if (selected === null) {
+        selected = { r, c };
+        cell.classList.add('selected');
+        msgEl.textContent = `已选中 ${GEMS[board[r][c]]}，点击相邻宝石交换`;
+        return;
+      }
+
+      const prev = document.querySelector(`.cell[data-row="${selected.r}"][data-col="${selected.c}"]`);
+      if (prev) prev.classList.remove('selected');
+
+      const sr = selected.r, sc = selected.c;
+      const dr = Math.abs(sr - r) + Math.abs(sc - c);
+
+      if (dr === 0) {
+        selected = null;
+        msgEl.textContent = '已取消选择';
+        return;
+      }
+
+      if (dr !== 1) {
+        selected = { r, c };
+        cell.classList.add('selected');
+        msgEl.textContent = `只能交换相邻的宝石！已选中 ${GEMS[board[r][c]]}`;
+        return;
+      }
+
+      // swap
+      selected = null;
+      [board[sr][sc], board[r][c]] = [board[r][c], board[sr][sc]];
+      renderBoard();
+
+      // check matches
+      const matches = findAllMatches();
+      if (matches.size > 0) {
+        msgEl.textContent = '🎉 消除成功！';
+        processMatches();
+      } else {
+        // swap back
+        [board[sr][sc], board[r][c]] = [board[r][c], board[sr][sc]];
+        renderBoard();
+        msgEl.textContent = '😕 无法消除，换回来吧';
+      }
+    }
+
+    function newGame() {
+      selected = null;
+      score = 0;
+      isProcessing = false;
+      scoreEl.textContent = '0';
+      msgEl.textContent = '新游戏开始！点击两个相邻的宝石交换';
+      initBoard();
+      // clear any initial matches by regenerating
+      while (findAllMatches().size > 0) initBoard();
+      renderBoard();
+    }
+
+    boardEl.addEventListener('click', handleClick);
+    document.getElementById('newGameBtn').addEventListener('click', newGame);
+
+    newGame();
+  })();
+</script>
+</body>
+</html>
